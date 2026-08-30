@@ -4,21 +4,30 @@ import { runReadingPipeline } from "../reading/pipeline.js";
 
 async function main() {
   const session = await startSession();
-  console.log(`session gen ${session.generation} (${session.id}) started\n`);
+  console.log(`session gen ${session.generation} (${session.id}) started`);
 
   await logEvent(session.id, session.generation, "session_start", {});
 
   try {
     const result = await runReadingPipeline(session.id, session.generation);
 
+    console.log(`wildcard eligible this session: ${result.wildcardEligible}`);
     console.log(`fetched ${result.totalFetched} raw items`);
     console.log(`logged item_seen for ${result.itemsSeen.length} new items (post-dedupe)\n`);
     console.log(`read ${result.itemsRead.length} items in full:\n`);
 
-    for (const { item, fullText, fetchMethod } of result.itemsRead) {
+    for (const { item, chars, selectionReason } of result.itemsRead) {
       console.log(`- [${item.kind}] ${item.title}`);
       console.log(`  ${item.url ?? "(no url)"}`);
-      console.log(`  via ${fetchMethod}, ${fullText.length} chars read`);
+      console.log(`  ${chars} chars — ${selectionReason}`);
+      console.log();
+    }
+
+    if (result.skippedAttempts.length > 0) {
+      console.log(`${result.skippedAttempts.length} attempt(s) skipped (below min read chars):`);
+      for (const { item, chars, reason } of result.skippedAttempts) {
+        console.log(`- [${item.kind}] ${item.title} — ${chars} chars (${reason})`);
+      }
       console.log();
     }
 
