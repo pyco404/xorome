@@ -7,6 +7,8 @@ import type {
   NewPost,
   LedgerRow,
   NewLedgerEntry,
+  AgentMetaRow,
+  NewAgentMeta,
 } from "./index.js";
 
 // Hand-written to match supabase/migrations/*.sql. Kept minimal (just what
@@ -37,6 +39,12 @@ export interface Database {
         Row: LedgerRow;
         Insert: NewLedgerEntry;
         Update: Partial<NewLedgerEntry>;
+        Relationships: [];
+      };
+      agent_meta: {
+        Row: AgentMetaRow;
+        Insert: NewAgentMeta;
+        Update: Partial<NewAgentMeta>;
         Relationships: [];
       };
     };
