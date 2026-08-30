@@ -38,10 +38,13 @@ export type Session = {
   notes: string | null;
 };
 
-// generation is a DB identity column — never settable on insert.
+// generation is a calendar day of operation, computed by the app (see
+// events/generation.ts) — no longer a DB identity column, since many
+// sessions share one generation.
 export type NewSession = Partial<
   Pick<Session, "status" | "notes" | "budget_usd_spent" | "started_at" | "ended_at">
->;
+> &
+  Pick<Session, "generation">;
 
 export type EventRow = {
   id: string;
@@ -95,6 +98,13 @@ export type LedgerRow = {
 export type NewLedgerEntry = Omit<LedgerRow, "id" | "ts"> & {
   ts?: string;
 };
+
+export type AgentMetaRow = {
+  key: string;
+  value: string;
+};
+
+export type NewAgentMeta = AgentMetaRow;
 
 // ---------------------------------------------------------------------------
 // reading pipeline
