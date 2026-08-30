@@ -1,41 +1,53 @@
-import type { RawItem } from "../types/index.js";
+import type { RawItem, SourceKind } from "../types/index.js";
 
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i]!;
-    copy[i] = copy[j]!;
-    copy[j] = tmp;
-  }
-  return copy;
+// arXiv weighted highest per explicit ask: highest-signal source, was being
+// read 0 times across the first two sessions despite being ~1/3 of the pool.
+const KIND_WEIGHTS: Partial<Record<SourceKind, number>> = {
+  arxiv: 5,
+  github_issue: 2,
+  rss: 2,
+  wildcard: 2,
+  hn_story: 1.5,
+  hn_comment: 1.5,
+  own_error: 1.5,
+  github_release: 1,
+  github_trending: 1,
+  own_history: 1,
+  x_timeline: 1,
+  x_mentions: 1,
+};
+
+export function weightFor(kind: SourceKind): number {
+  return KIND_WEIGHTS[kind] ?? 1;
 }
 
-// Picks a source-diverse sample to read in full. This is a mechanical
-// pick, not a judgment about what's interesting — that call belongs to
-// the agent in post generation (step 3), not the harness.
-export function selectItemsToRead(items: RawItem[], limit: number): RawItem[] {
-  const byKind = new Map<string, RawItem[]>();
-  for (const item of items) {
-    const bucket = byKind.get(item.kind) ?? [];
-    bucket.push(item);
-    byKind.set(item.kind, bucket);
-  }
-  for (const [kind, bucket] of byKind) byKind.set(kind, shuffle(bucket));
-
-  const kinds = shuffle([...byKind.keys()]);
-  const selected: RawItem[] = [];
-  let round = 0;
-  while (selected.length < limit && kinds.some((k) => (byKind.get(k)?.length ?? 0) > round)) {
-    for (const kind of kinds) {
-      const bucket = byKind.get(kind);
-      const candidate = bucket?.[round];
-      if (!candidate) continue;
-      selected.push(candidate);
-      if (selected.length >= limit) break;
+// Two items count as the same entity if they're about the same repo (a
+// release and an issue from the same repo shouldn't both get read), or
+// otherwise the same kind+externalId.
+export function entityKey(item: RawItem): string {
+  switch (item.kind) {
+    case "github_trending":
+      return `repo:${item.externalId}`;
+    case "github_release":
+    case "github_issue": {
+      const repo = typeof item.raw?.repo === "string" ? item.raw.repo : item.externalId.split("#")[0];
+      return `repo:${repo}`;
     }
-    round++;
+    default:
+      return `${item.kind}:${item.externalId}`;
   }
+}
 
-  return selected;
+// Weighted random pick, no replacement. Caller is responsible for removing
+// the returned item from `pool` before the next call.
+export function pickWeighted(pool: RawItem[]): RawItem | null {
+  if (pool.length === 0) return null;
+  const weights = pool.map((item) => weightFor(item.kind));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i] ?? 0;
+    if (r <= 0) return pool[i] ?? null;
+  }
+  return pool[pool.length - 1] ?? null;
 }
