@@ -1,6 +1,14 @@
 import { startSession, endSession } from "../events/session.js";
 import { logEvent } from "../events/log.js";
+import { logSessionApiSpend } from "../events/ledger.js";
 import { runReadingPipeline } from "../reading/pipeline.js";
+
+// Nothing in the reading pipeline calls the Agent SDK (that's step 3), so
+// actual spend is genuinely $0 for now. Every session still writes the
+// ledger row per spec ("every session writes an api ledger row with its
+// actual spend") — once step 3 exists, this becomes the real
+// SDKResultMessage.total_cost_usd instead of a hardcoded 0.
+const TOTAL_COST_USD = 0;
 
 async function main() {
   const session = await startSession();
@@ -39,15 +47,28 @@ async function main() {
       console.log();
     }
 
+    await logSessionApiSpend(
+      session.id,
+      TOTAL_COST_USD,
+      `session gen ${session.generation}: reading pipeline only, no Agent SDK calls`
+    );
+
     await endSession(session.id, "completed", {
       notes: `step 2 reading pipeline: ${result.itemsSeen.length} seen, ${result.itemsRead.length} read, ${result.sourceErrors.length} source errors`,
+      budgetUsdSpent: TOTAL_COST_USD,
     });
 
     console.log(`session gen ${session.generation} completed.`);
   } catch (err) {
     console.error(err);
+    await logSessionApiSpend(
+      session.id,
+      TOTAL_COST_USD,
+      `session gen ${session.generation}: failed before completing`
+    );
     await endSession(session.id, "failed", {
       notes: err instanceof Error ? err.message : String(err),
+      budgetUsdSpent: TOTAL_COST_USD,
     });
     process.exit(1);
   }
