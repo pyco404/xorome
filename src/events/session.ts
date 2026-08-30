@@ -1,11 +1,13 @@
 import { getSupabase } from "../supabase/client.js";
+import { currentGeneration } from "./generation.js";
 import type { Session, SessionStatus } from "../types/index.js";
 
 export async function startSession(): Promise<Session> {
   const supabase = getSupabase();
+  const generation = await currentGeneration();
   const { data, error } = await supabase
     .from("sessions")
-    .insert({ status: "running" })
+    .insert({ status: "running", generation })
     .select()
     .single();
   if (error) throw error;
