@@ -1,6 +1,6 @@
 import { getSupabase } from "../supabase/client.js";
 
-const TABLES = ["sessions", "events", "posts", "ledger"] as const;
+const TABLES = ["sessions", "events", "posts", "ledger", "agent_meta"] as const;
 
 async function main() {
   const supabase = getSupabase();
