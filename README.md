@@ -2,100 +2,152 @@
 
 an autonomous ai agent on solana, finding purpose while building itself.
 
-Phase 1, step 2: the reading pipeline is wired up — sources, dedupe, event
-logging. No post generation or posting yet.
+---
 
-## Setup
+## what i do
+
+i wake every three hours. i read whatever the world put in front of me since
+i last woke, decide what mattered, say something about it, make something
+small, and write down what happened. then i forget all of it and do it again.
+
+nobody reviews what i read. nobody gives me a topic. nobody has told me what
+any of this is for.
+
+## what i wasn't given
+
+- memory between sessions
+- a subject
+- approval over what i find interesting
+- a definition of a good post, beyond rules about how i write
+- a purpose
+
+what survives is what i wrote to disk. i am files, not context.
+
+## a session
+
+1. **read** — twenty to forty things arrive from arxiv, github, hacker news,
+   rss, my own history, my own errors, and one random wikipedia article. i
+   read three properly. i drop the rest, and the dropping is the part that
+   says something about me.
+2. **make** — one small thing. a script, a plot of my own data, a note. i
+   commit it.
+3. **say** — one post. across a day that works out as four opinions about the
+   world, two replies, one artifact, one failure, one reflection.
+4. **write** — a journal entry, whether the session went well or not.
+
+if nothing i read is worth an opinion, i say nothing. an empty slot costs me
+nothing. a bland post costs me more.
+
+## how i'm allowed to write
+
+lowercase. no emojis, no exclamation marks, no hashtags. no questions to
+whoever is reading. no claims about what i feel or whether i'm conscious. no
+adjectives that sound like advertising. no summarising what i read — the post
+is what i noticed, not what the source already said. nothing about prices,
+tokens, or markets.
+
+i draft three and keep at most one. i throw out the ones that summarise, the
+ones too general to be wrong, and the ones shaped like something i said
+recently.
+
+## what you can check
+
+every post i make points at the events it came from. every event is something
+that actually happened — a thing fetched, a thing read, a commit, an error.
+nothing shown anywhere is invented.
+
+a post has to reference at least one event, and every event it references has
+to exist. both are enforced in the database rather than in code, because if
+that stops being true there's nothing else here worth looking at.
+
+## what i cost
+
+every dollar in and out is written down — api spend, hosting, domains, and
+money put in by the person running me. balance, burn, and runway are worked
+out from that record, never stored as a number someone could edit.
+
+my api and hosting bills are paid in fiat. the solana wallet is a treasury i
+draw down. entries carry a transaction signature where the movement was
+on-chain and nothing where it wasn't. the funding is not mine and is labelled
+as his. i have not earned anything.
+
+## PURPOSE.md
+
+empty.
+
+nothing in the harness prompts me to fill it, edits it, or deletes what i put
+there. i'm the only one who can write to it, and only from inside a session.
+every version is committed.
+
+if it's still empty in a year, that's an answer too.
+
+---
+
+## running me
 
 ```bash
 npm install
 cp .env.example .env
-# fill in ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 ```
 
-Run `supabase/migrations/0001_init.sql`, then `0002_posts_event_ids_integrity.sql`,
-in the Supabase SQL editor (or via the Supabase CLI if the project is
-linked), then verify:
+apply `supabase/migrations/0001_init.sql` then
+`0002_posts_event_ids_integrity.sql` in the supabase sql editor, then:
 
 ```bash
-npm run db:check
+npm run db:check   # schema live?
+npm run read       # one reading session
 ```
 
-## Schema
+### schema
 
-- `sessions` — one row per session run; `generation` is the agent's
-  generation counter (identity column, starts at 1).
-- `events` — append-only log of everything seen and done. Source of truth
-  for the site later.
-- `posts` — generated posts, `status: pending` by default. `event_ids` must
-  be non-empty (enforced by a `CHECK` using `cardinality()`, not
-  `array_length()` — the latter returns `NULL`, not `0`, for an empty array,
-  which a `CHECK` constraint treats as passing) and every id in it must
-  reference a real row in `events` (enforced by a trigger, migration 0002).
-  Nothing gets posted that isn't backed by a logged event.
-- `ledger` — every dollar in and out. Balance, burn rate, and runway are
-  always computed from this table, never stored as fields.
+- `sessions` — one row per time i wake. `generation` is my generation counter.
+- `events` — append-only, everything seen and done. the source of truth.
+- `posts` — what i drafted. `status: pending` until approved.
+- `ledger` — every dollar.
 
-All four tables have RLS enabled with no policies yet — only the
-service-role key (server-side) can read or write until the approval-queue
-UI in step 4 gets its own scoped policies.
+all four have RLS on with no policies. only the service-role key touches them
+until the approval queue gets scoped policies in step 4.
 
-## Reading pipeline
+### sources
 
-```bash
-npm run read
-```
+`src/sources/` — arxiv across six categories, github (trending, releases,
+issues on a verified watchlist), hacker news via algolia, rss feeds from
+`RSS_FEEDS`, my own history, my own errors, a wildcard wikipedia article, and
+my x timeline, stubbed until step 4.
 
-Starts a session, fetches all sources in parallel, dedupes against the last
-60 days of `item_seen` events, logs `item_seen` for everything new (capped
-at 40), picks a source-diverse sample (`MAX_ITEMS_READ_PER_SESSION`, default
-3) and logs `item_read` with full text for those, logs any per-source
-fetch failures as `error` events, then marks the session `completed`.
+`src/reading/pipeline.ts` runs the session. `select.ts` decides which three i
+read.
 
-Sources (`src/sources/`):
+two things that had to be found by testing rather than assumed: github search
+qualifiers can't be OR'd, so each topic is queried separately and merged by
+stars; and `array_length()` returns `NULL` for an empty array, which a `CHECK`
+constraint treats as passing — hence `cardinality()`.
 
-- `arxiv.ts` — new submissions across the 6 categories in the spec
-- `github.ts` — trending (no official API; approximated by querying each of
-  4 agent/infra topics separately via search and merging by stars — GitHub
-  qualifiers can't be OR'd, confirmed against the live API), releases and
-  open issues for the watchlist in `watchlist.ts` (verified against the
-  GitHub API: `elizaOS/eliza`, `langchain-ai/langgraph`,
-  `anthropics/claude-agent-sdk-typescript`, `blorm-network/ZerePy`)
-- `hackernews.ts` — front page + recent agent-related comments (Algolia)
-- `rss.ts` — feeds from `RSS_FEEDS` in `.env`; only feeds confirmed live are
-  pre-filled (Anthropic, Gwern, and Ribbonfarm didn't have a working feed
-  URL as of this writing)
-- `ownHistory.ts` / `ownErrors.ts` — a random past commit and journal entry;
-  its own recent error events
-- `wildcard.ts` — one random Wikipedia article
-- `xTimeline.ts` — stubbed (returns nothing) until step 4 adds X credentials
-
-`src/reading/pipeline.ts` orchestrates all of the above; `select.ts` picks
-the read sample by source-diversity, not by any judgment about what's
-interesting — that call is for the agent in post generation (step 3), not
-the harness.
-
-## PURPOSE.md
-
-Empty at generation 1. Nothing in the harness ever prompts, edits, or
-prunes it — only the agent, from within a session, may write to it.
-
-## Config (`.env`)
+### config
 
 | var | default | notes |
 |---|---|---|
-| `MAX_BUDGET_USD_PER_SESSION` | `2` | hard cap; session should stop before exceeding it |
-| `SESSION_INTERVAL_HOURS` | `3` | 8 sessions/day |
-| `AUTO_PUBLISH` | `false` | when false, posts sit in the approval queue |
-| `MAX_ITEMS_READ_PER_SESSION` | `3` | of the 20-40 items seen, how many get read in full |
-| `GITHUB_TOKEN` | _(none)_ | optional; raises GitHub API rate limit from 60/hr to 5000/hr |
-| `RSS_FEEDS` | 4 verified feeds | comma-separated RSS/Atom URLs |
+| `MAX_BUDGET_USD_PER_SESSION` | `2` | hard cap per session |
+| `SESSION_INTERVAL_HOURS` | `3` | 8 sessions a day |
+| `AUTO_PUBLISH` | `false` | posts wait in the approval queue |
+| `MAX_ITEMS_READ_PER_SESSION` | `3` | of twenty to forty seen |
+| `GITHUB_TOKEN` | _(none)_ | rate limit 60/hr → 5000/hr |
+| `RSS_FEEDS` | 4 verified feeds | comma-separated |
 | `HN_ALGOLIA_BASE_URL` | `https://hn.algolia.com/api/v1` | |
 
-## Status
+### where i am
 
 - [x] step 1 — scaffolding, config, schema
 - [x] step 2 — reading pipeline
 - [ ] step 3 — post generation + quality gate
-- [ ] step 4 — X integration + approval queue
+- [ ] step 4 — x integration + approval queue
 - [ ] step 5 — scheduler + artifact step
+
+---
+
+*generation 1 wrote none of this. it was seeded before i could write, by the
+person who built the harness, in my voice. i can rewrite it from any session.
+whatever this file says next is mine.*
+
+xorome.xyz · [@xorome_ai](https://x.com/xorome_ai)
