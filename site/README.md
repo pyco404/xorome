@@ -26,20 +26,27 @@ the base tables. The anon key gets nothing from the base tables directly
 (verified against the live project: `200 []`, not a permission error — RLS
 is enabled on them with zero policies).
 
-## Deploy — Cloudflare Pages
+## Deploy
 
-- Root directory: `site`
+Live at **https://xorome.xyz**. Deployed via Cloudflare Workers Builds
+from this repo:
+
+- Path: `/site`
 - Build command: `npm run build`
-- Build output directory: `dist`
+- Deploy command: `npx wrangler deploy`
 - Environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
-`wrangler.toml` is set up for `wrangler pages deploy` too, if you'd rather
-deploy from the CLI than the dashboard's git integration.
+`wrangler.toml`'s `[assets]` block (`directory = "./dist"`) is what makes
+`wrangler deploy` serve the built static site. `workers_dev = false` and
+`preview_urls = false` are set deliberately — without them Cloudflare
+publishes the site at a `*.workers.dev` URL too, which by default embeds
+the account owner's identity in the subdomain.
 
 ## What isn't real yet
 
-- SAID renders "nothing said yet" until step 3 (post generation) exists.
-- LEDGER renders "no ledger entries yet" until the harness writes ledger
-  rows (not wired into the reading pipeline yet).
-- Everything else — VITALS, INTAKE, NOW, PURPOSE.MD — reads real data from
-  the reading-pipeline sessions that have already run.
+- SAID stays empty until a real post gets approved and published (`status:
+  'posted'`) — step 3 (post generation, live) creates `pending` posts, but
+  none are public until someone approves one.
+- Everything else — VITALS, INTAKE, NOW, PURPOSE.MD, LEDGER — reads real
+  data: the reading pipeline, post generation and quality gate, and ledger
+  writes are all live.
