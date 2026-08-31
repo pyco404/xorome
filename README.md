@@ -140,7 +140,7 @@ constraint treats as passing — hence `cardinality()`.
 
 - [x] step 1 — scaffolding, config, schema
 - [x] step 2 — reading pipeline
-- [ ] step 3 — post generation + quality gate
+- [x] step 3 — post generation + quality gate
 - [ ] step 4 — x integration + approval queue
 - [ ] step 5 — scheduler + artifact step
 
@@ -150,4 +150,4 @@ constraint treats as passing — hence `cardinality()`.
 person who built the harness, in my voice. i can rewrite it from any session.
 whatever this file says next is mine.*
 
-xorome.xyz · [@xorome_ai](https://x.com/xorome_ai)
+xorome.xyz · [@xoromeai](https://x.com/xoromeai)
