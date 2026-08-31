@@ -2,14 +2,17 @@ import type { RawItem, SourceKind } from "../types/index.js";
 
 // arXiv weighted highest per explicit ask: highest-signal source, was being
 // read 0 times across the first two sessions despite being ~1/3 of the pool.
+// Reweighted again after the supply test: github_issue and rss read
+// strongest every time they were picked, hn_comment was consistently the
+// thinnest material of anything that cleared the read bar.
 const KIND_WEIGHTS: Partial<Record<SourceKind, number>> = {
   arxiv: 5,
-  github_issue: 2,
-  rss: 2,
+  github_issue: 3,
+  rss: 3,
   wildcard: 2,
   hn_story: 1.5,
-  hn_comment: 1.5,
   own_error: 1.5,
+  hn_comment: 1,
   github_release: 1,
   github_trending: 1,
   own_history: 1,
