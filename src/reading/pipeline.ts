@@ -18,8 +18,16 @@ const MIN_READ_CHARS = 400;
 const MAX_READ_ATTEMPTS = 15;
 const WILDCARD_SESSION_PROBABILITY = 0.25;
 
+// eventId is the real events.id row backing this item — required so post
+// generation can reference genuine events, not just item content.
+export interface SeenItem {
+  item: RawItem;
+  eventId: string;
+}
+
 export interface ReadItem {
   item: RawItem;
+  eventId: string;
   fullText: string;
   fetchMethod: string;
   selectionReason: string;
@@ -32,13 +40,19 @@ export interface SkippedAttempt {
   reason: string;
 }
 
+export interface LoggedError {
+  error: SourceError;
+  eventId: string;
+}
+
 export interface ReadingPipelineResult {
   totalFetched: number;
-  itemsSeen: RawItem[];
+  itemsSeen: SeenItem[];
   itemsRead: ReadItem[];
   skippedAttempts: SkippedAttempt[];
   wildcardEligible: boolean;
   sourceErrors: SourceError[];
+  loggedErrors: LoggedError[];
 }
 
 // Fetches all sources, dedupes against past item_seen events, logs
@@ -79,8 +93,9 @@ export async function runReadingPipeline(
   const unseen = await filterUnseen(allItems);
   const capped = unseen.slice(0, MAX_ITEMS_SEEN);
 
+  const itemsSeen: SeenItem[] = [];
   for (const item of capped) {
-    await logEvent(
+    const eventId = await logEvent(
       sessionId,
       generation,
       "item_seen",
@@ -90,13 +105,17 @@ export async function runReadingPipeline(
         title: item.title,
         summary: item.summary.slice(0, 500),
         publishedAt: item.publishedAt,
+        authored_by_agent: item.authoredByAgent ?? false,
       },
       item.url ?? undefined
     );
+    itemsSeen.push({ item, eventId });
   }
 
+  const loggedErrors: LoggedError[] = [];
   for (const err of errors) {
-    await logEvent(sessionId, generation, "error", { ...err, stage: "read" }, err.url);
+    const eventId = await logEvent(sessionId, generation, "error", { ...err, stage: "read" }, err.url);
+    loggedErrors.push({ error: err, eventId });
   }
 
   const wildcardEligible = Math.random() < WILDCARD_SESSION_PROBABILITY;
@@ -144,15 +163,7 @@ export async function runReadingPipeline(
       picked.kind
     )}), attempt ${attempts} of ${MAX_READ_ATTEMPTS}, ${chars} chars via ${result.fetchMethod}`;
 
-    itemsRead.push({
-      item: picked,
-      fullText: result.fullText,
-      fetchMethod: result.fetchMethod,
-      selectionReason,
-      chars,
-    });
-
-    await logEvent(
+    const eventId = await logEvent(
       sessionId,
       generation,
       "item_read",
@@ -164,9 +175,19 @@ export async function runReadingPipeline(
         fetchMethod: result.fetchMethod,
         selection_reason: selectionReason,
         chars,
+        authored_by_agent: picked.authoredByAgent ?? false,
       },
       picked.url ?? undefined
     );
+
+    itemsRead.push({
+      item: picked,
+      eventId,
+      fullText: result.fullText,
+      fetchMethod: result.fetchMethod,
+      selectionReason,
+      chars,
+    });
 
     if (result.error) {
       await logEvent(
@@ -186,10 +207,11 @@ export async function runReadingPipeline(
 
   return {
     totalFetched,
-    itemsSeen: capped,
+    itemsSeen,
     itemsRead,
     skippedAttempts,
     wildcardEligible,
     sourceErrors: errors,
+    loggedErrors,
   };
 }
