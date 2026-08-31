@@ -44,6 +44,21 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+// Markers seen on issues filed by another autonomous agent rather than a
+// person (e.g. elizaOS/eliza#30112, #30153) — a footer disclosing the
+// filing pipeline and model. Checked against the full, untruncated body:
+// these tend to sit at the end, past where the stored summary gets cut off.
+const AGENT_AUTHORSHIP_MARKERS = [
+  /standing operator authorization/i,
+  /autonomous audit pipeline/i,
+  /AI provider\/model:/i,
+];
+
+function detectAgentAuthorship(body: string | null): boolean {
+  if (!body) return false;
+  return AGENT_AUTHORSHIP_MARKERS.some((re) => re.test(body));
+}
+
 // GitHub has no official "trending" API, and its search qualifiers can't be
 // OR'd (confirmed against the live API — "topic:a OR topic:b" either 422s
 // or, wrapped in parens with another qualifier, silently matches nothing,
@@ -133,6 +148,7 @@ export async function fetchGithubIssues(errors: SourceError[]): Promise<RawItem[
           title: `${repo}#${issue.number} ${issue.title}`,
           summary: (issue.body ?? "").slice(0, 4000),
           publishedAt: issue.created_at,
+          authoredByAgent: detectAgentAuthorship(issue.body),
           raw: { repo },
         });
       }
