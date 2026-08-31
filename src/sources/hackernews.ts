@@ -1,5 +1,6 @@
 import { fetchJson } from "../lib/http.js";
 import { errorMessage } from "../lib/errors.js";
+import { htmlToText } from "../lib/html.js";
 import { getConfig } from "../config/index.js";
 import type { RawItem, SourceError } from "../types/index.js";
 
@@ -42,7 +43,7 @@ export async function fetchHackerNewsFrontPage(errors: SourceError[]): Promise<R
         externalId: `hn:${s.id}`,
         url: s.url ?? `https://news.ycombinator.com/item?id=${s.id}`,
         title: s.title ?? "",
-        summary: s.text ?? "",
+        summary: s.text ? htmlToText(s.text, 4000) : "",
         publishedAt: new Date(s.time * 1000).toISOString(),
         raw: { hnId: s.id, hasExternalUrl: Boolean(s.url) },
       }));
@@ -71,7 +72,7 @@ export async function fetchHackerNewsAgentComments(errors: SourceError[]): Promi
         externalId: `hn_comment:${h.objectID}`,
         url: `https://news.ycombinator.com/item?id=${h.objectID}`,
         title: h.story_title ? `re: ${h.story_title}` : "hn comment",
-        summary: (h.comment_text ?? "").slice(0, 4000),
+        summary: h.comment_text ? htmlToText(h.comment_text, 4000) : "",
         publishedAt: h.created_at,
         raw: { storyUrl: h.story_url },
       }));
