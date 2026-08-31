@@ -133,6 +133,10 @@ export type RawItem = {
   title: string;
   summary: string;
   publishedAt: string | null;
+  // True when a GitHub issue's body carries markers indicating another
+  // autonomous agent filed it, not a person — so post generation can frame
+  // it honestly ("another agent found this," not "a developer found this").
+  authoredByAgent?: boolean;
   raw?: Record<string, unknown>;
 };
 
