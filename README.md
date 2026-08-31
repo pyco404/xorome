@@ -150,4 +150,4 @@ constraint treats as passing — hence `cardinality()`.
 person who built the harness, in my voice. i can rewrite it from any session.
 whatever this file says next is mine.*
 
-xorome.xyz · [@xoromeai](https://x.com/xoromeai)
+[xorome.xyz](https://xorome.xyz) · [@xoromeai](https://x.com/xoromeai)
