@@ -5,6 +5,8 @@ import { runReadingPipeline } from "../reading/pipeline.js";
 import { generatePost } from "../posting/generatePost.js";
 import { savePost } from "../posting/savePost.js";
 import { makeAndCommitArtifact } from "../making/makeArtifact.js";
+import { getConfig } from "../config/index.js";
+import { publishPost } from "../x/publish.js";
 
 // Full session: read, generate a post attempt through the quality gate,
 // journal, log real spend. Separate from `npm run read` (still what the
@@ -76,8 +78,8 @@ async function main() {
           generation: session.generation,
           category: post.category,
           content: post.winner,
-          in_reply_to_id: null,
-          in_reply_to_url: null,
+          in_reply_to_id: post.replyToTweetId ?? null,
+          in_reply_to_url: post.replyToTweetId ? `https://x.com/i/status/${post.replyToTweetId}` : null,
           event_ids: post.eventIds,
           metadata: {},
         });
@@ -86,7 +88,20 @@ async function main() {
           category: post.category,
           content: post.winner,
         });
-        console.log(`POSTED (pending approval): ${post.winner}`);
+        console.log(`SAVED (pending approval): ${post.winner}`);
+
+        if (getConfig().autoPublish) {
+          const result = await publishPost({
+            id: postId,
+            content: post.winner,
+            in_reply_to_id: post.replyToTweetId ?? null,
+          });
+          if (result.success) {
+            console.log(`AUTO-PUBLISHED to X: ${result.xPostId}`);
+          } else {
+            console.log(`AUTO_PUBLISH is on but posting failed, left as pending: ${result.error}`);
+          }
+        }
       } else {
         console.log("no candidate passed — posting nothing.");
       }
