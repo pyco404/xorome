@@ -33,13 +33,17 @@ export async function callAgentSdkJson<T>(
   });
 
   for await (const message of q) {
-    if (message.type !== "result") continue;
+    if (message.type !== "result") {
+      console.error(`sdk message: type=${message.type}`, "subtype" in message ? `subtype=${message.subtype}` : "");
+      continue;
+    }
 
     const totalCostUsd = message.total_cost_usd;
     if (message.subtype !== "success") {
       throw new Error(`agent sdk call failed: ${message.subtype}`);
     }
     if (message.structured_output === undefined) {
+      console.error("agent sdk result with no structured_output:", JSON.stringify(message).slice(0, 4000));
       throw new Error("agent sdk call returned no structured_output");
     }
     return { data: message.structured_output as T, totalCostUsd };
