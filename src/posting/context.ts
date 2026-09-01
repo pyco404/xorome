@@ -14,6 +14,8 @@ export interface PostContext {
   // back to asking for 3 independent candidates.
   candidateCount?: number;
   anchors?: string[];
+  // reply only: the X tweet id being replied to.
+  replyToTweetId?: string;
 }
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../..");
@@ -26,10 +28,6 @@ function readPurposeMd(): string {
   }
 }
 
-// reply needs a real mention/timeline thread (X integration is step 4) —
-// that one still always falls back to opinion, exactly as spec anticipates
-// ("expect this to happen often in the first weeks"). artifact now has
-// real backing material via the make step.
 export async function buildContext(
   category: PostCategory,
   reading: ReadingPipelineResult
@@ -44,8 +42,30 @@ export async function buildContext(
     case "artifact":
       return (await buildArtifactContext()) ?? buildOpinionContext(reading);
     case "reply":
-      return buildOpinionContext(reading);
+      return buildReplyContext(reading) ?? buildOpinionContext(reading);
   }
+}
+
+// Falls back to opinion whenever there's nothing worth replying to — no
+// mentions were read this session — exactly as spec anticipates ("expect
+// this to happen often in the first weeks"). Uses the mention's own text
+// as context, not a full walked thread: X's reverse-chronological/thread
+// APIs need more than the mentions endpoint alone, and this is genuinely
+// untested against the live API either way (no X credentials to test
+// with) — keeping the scope bounded here rather than compounding
+// unverified surface area.
+function buildReplyContext(reading: ReadingPipelineResult): PostContext | null {
+  const mentionRead = reading.itemsRead.find((r) => r.item.kind === "x_mentions");
+  if (!mentionRead) return null;
+
+  return {
+    category: "reply",
+    prompt:
+      "write a reply post. below is the mention you're replying to — the full text of what they said.\n\n" +
+      readBlock("x_mentions", mentionRead.item.title, mentionRead.fullText),
+    eventIds: [mentionRead.eventId],
+    replyToTweetId: mentionRead.item.externalId,
+  };
 }
 
 function readBlock(kind: string, title: string, text: string): string {
