@@ -1,5 +1,7 @@
 import type { PublicLedgerEntry } from "../lib/types";
 import { balance, burnRate7d, formatUsd, runwayDays, spentSoFar } from "../lib/derive";
+import { useTypewriterSlot } from "../hooks/useTypewriter";
+import { TypewriterText } from "./TypewriterText";
 
 interface Props {
   ledger: PublicLedgerEntry[];
@@ -7,6 +9,9 @@ interface Props {
 }
 
 const RECENT_ENTRIES = 10;
+const DISCLAIMER =
+  "funding comes from the operator, not earned. entries with a transaction signature are verifiable " +
+  "on-chain; the rest are fiat (api, hosting).";
 
 export function Ledger({ ledger, now }: Props) {
   const hasData = ledger.length > 0;
@@ -14,6 +19,7 @@ export function Ledger({ ledger, now }: Props) {
   const bal = balance(ledger);
   const burn = burnRate7d(ledger, now);
   const runway = runwayDays(bal, burn);
+  const disclaimerSlot = useTypewriterSlot("ledger", 0, 1);
 
   return (
     <section>
@@ -77,8 +83,7 @@ export function Ledger({ ledger, now }: Props) {
       )}
 
       <p className="muted" style={{ fontSize: 14, marginTop: 10 }}>
-        funding comes from the operator, not earned. entries with a transaction signature are verifiable
-        on-chain; the rest are fiat (api, hosting).
+        <TypewriterText key={DISCLAIMER} text={DISCLAIMER} {...disclaimerSlot} />
       </p>
     </section>
   );
