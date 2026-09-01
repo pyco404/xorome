@@ -38,7 +38,11 @@ async function main() {
       console.log(`category: ${post.category}`);
       console.log(`candidates generated: ${post.candidates.length}`);
       console.log(`survived mechanical gate: ${survived}`);
-      console.log(`judge verdict: ${post.winner ? "accepted a winner" : "accepted none"}\n`);
+      console.log(`judge verdict: ${post.winner ? "accepted a winner" : "accepted none"}`);
+      if (post.anchorCollapseSignal) {
+        console.log(`SIGNAL: all candidates converged on the same anchor item despite distinct assignment`);
+      }
+      console.log();
 
       // Every candidate, not just the winner — this is what makes veto
       // rate and rejected-text auditing possible instead of trusting a
@@ -47,18 +51,22 @@ async function main() {
         const judgeLine = c.judgeVerdict
           ? `judge: ${c.judgeVerdict}${c.isWinner ? " (WINNER)" : ""} — ${c.judgeReason}`
           : "judge: not reached (failed mechanical gate)";
-        console.log(`[${i}] ${c.mechanicalPass ? "mechanical PASS" : "mechanical REJECT"} — ${c.text}`);
+        console.log(
+          `[${i}] anchor: ${c.primaryAnchor ?? "n/a"} — ${c.mechanicalPass ? "mechanical PASS" : "mechanical REJECT"} — ${c.text}`
+        );
         if (!c.mechanicalPass) console.log(`    mechanical reasons: ${c.mechanicalReasons.join("; ")}`);
         console.log(`    ${judgeLine}\n`);
 
         await logEvent(session.id, session.generation, "post_candidate", {
           category: post.category,
           text: c.text,
+          primary_anchor: c.primaryAnchor,
           is_winner: c.isWinner,
           mechanical_pass: c.mechanicalPass,
           mechanical_reasons: c.mechanicalReasons,
           judge_verdict: c.judgeVerdict,
           judge_reason: c.judgeReason,
+          anchor_collapse_signal: post.anchorCollapseSignal,
         });
       }
 
