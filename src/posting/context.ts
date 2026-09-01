@@ -2,13 +2,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSupabase } from "../supabase/client.js";
-import type { ReadingPipelineResult } from "../reading/pipeline.js";
+import type { ReadingPipelineResult, SeenItem } from "../reading/pipeline.js";
 import type { PostCategory } from "../types/index.js";
 
 export interface PostContext {
   category: PostCategory;
   prompt: string;
   eventIds: string[];
+  // Opinion only: one candidate per anchor, not a fixed 3 — see
+  // buildOpinionContext. Other categories omit this and generate.ts falls
+  // back to asking for 3 independent candidates.
+  candidateCount?: number;
+  anchors?: string[];
 }
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../..");
@@ -43,20 +48,65 @@ export async function buildContext(
   }
 }
 
-function buildOpinionContext(reading: ReadingPipelineResult): PostContext | null {
-  if (reading.itemsRead.length === 0) return null;
+function readBlock(kind: string, title: string, text: string): string {
+  return `[${kind}] ${title}\n${text.slice(0, 3000)}`;
+}
 
-  const material = reading.itemsRead
-    .map((r, i) => `--- item ${i + 1}: [${r.item.kind}] ${r.item.title} ---\n${r.fullText.slice(0, 3000)}`)
-    .join("\n\n");
+// Every rejection in the first batch failed the same way: paraphrasing one
+// source's own stated diagnosis. The fix isn't "reference an item," it's
+// forcing a comparison — set two things against each other and say what's
+// different, which is where a real position comes from, not a restatement.
+//
+// One candidate per available read item (not a fixed 3 pulled from
+// whichever item the model liked best), each anchored to a different item
+// and required to compare it against something else: another read if
+// there are 2+, or own history if there's only 1. If there's exactly one
+// read and no own-history material, there's no valid comparison — opinion
+// can't honestly run this session, same principle as every other fallback
+// here: never fabricate what doesn't exist.
+function buildOpinionContext(reading: ReadingPipelineResult): PostContext | null {
+  const reads = reading.itemsRead;
+  if (reads.length === 0) return null;
+
+  const ownHistory: SeenItem[] = reading.itemsSeen.filter((s) => s.item.kind === "own_history");
+  if (reads.length === 1 && ownHistory.length === 0) return null;
+
+  const historyBlock =
+    ownHistory.length > 0
+      ? ownHistory.map((s) => readBlock("own_history", s.item.title, s.item.summary)).join("\n\n")
+      : null;
+
+  const anchorBlocks = reads.map((r, i) => {
+    const others = reads.filter((_, j) => j !== i);
+    const comparisonBlock =
+      others.length > 0
+        ? others.map((o) => readBlock(o.item.kind, o.item.title, o.fullText)).join("\n\n")
+        : (historyBlock as string); // reads.length === 1 guarantees historyBlock is non-null here
+
+    return (
+      `--- candidate ${i + 1}: anchored to [${r.item.kind}] ${r.item.title} ---\n` +
+      `${readBlock(r.item.kind, r.item.title, r.fullText)}\n\n` +
+      `compare it against:\n${comparisonBlock}`
+    );
+  });
+
+  const prompt =
+    "write opinion post candidates. write exactly one candidate per anchor below, in order — each " +
+    "candidate must draw on its anchor AND the comparison material given with it, and say what's " +
+    "different, what conflicts, or what one leaves out that the other doesn't. a candidate that only " +
+    "restates its anchor without setting it against the comparison material fails — that's what caused " +
+    "every rejection last time.\n\n" +
+    anchorBlocks.join("\n\n");
+
+  const eventIds = [...reads.map((r) => r.eventId), ...ownHistory.map((s) => s.eventId)];
+  const anchors = reads.map((r) => r.item.title);
 
   return {
     category: "opinion",
-    prompt:
-      "write an opinion post. below are the items read this session. reference ONE of them specifically " +
-      "— what you noticed that the source itself didn't say, not a summary of it.\n\n" +
-      material,
-    eventIds: reading.itemsRead.map((r) => r.eventId),
+    prompt,
+    eventIds,
+    candidateCount: anchors.length,
+    anchors,
   };
 }
 
