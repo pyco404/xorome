@@ -1,0 +1,17 @@
+[Unit]
+Description=Run xorome session every 3 hours (8/day)
+
+[Timer]
+# Every 3 hours on the hour, UTC: 00:00, 03:00, ..., 21:00. Explicit UTC
+# so this fires the same times regardless of the VPS's configured
+# timezone — everything else in this project (generation, event
+# timestamps) is UTC-based too.
+OnCalendar=*-*-* 0/3:00:00 UTC
+# If the machine was off/rebooting when a run was scheduled, run it once
+# promptly when the timer next becomes active, instead of silently skipping
+# it — this is the reboot-survival property a laptop-bound cron didn't have.
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

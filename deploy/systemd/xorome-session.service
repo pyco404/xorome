@@ -1,0 +1,20 @@
+[Unit]
+Description=xorome session (read, generate, post, make)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/xorome
+EnvironmentFile=/opt/xorome/.env
+# If Node was installed via nvm rather than a system package (nodesource/apt),
+# npm won't be on this PATH — either install Node system-wide (recommended
+# for a VPS; see deploy/README.md) or replace this Environment= line with
+# the absolute path to the nvm-installed node's bin directory.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/npm run session
+TimeoutStartSec=600
+User=xorome
+Group=xorome
+StandardOutput=journal
+StandardError=journal
