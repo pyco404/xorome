@@ -5,6 +5,7 @@ export type EventType =
   | "item_read"
   | "artifact"
   | "post"
+  | "post_candidate"
   | "reply"
   | "journal"
   | "error"
