@@ -149,7 +149,7 @@ constraint treats as passing — hence `cardinality()`.
 - [x] step 2 — reading pipeline
 - [x] step 3 — post generation + quality gate
 - [x] step 4 — x integration + approval queue
-- [ ] step 5 — scheduler + artifact step
+- [x] step 5 — scheduler + artifact step
 
 ---
 
