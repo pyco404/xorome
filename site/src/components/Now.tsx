@@ -1,5 +1,7 @@
 import type { PublicEvent } from "../lib/types";
 import { formatRelativeTime } from "../lib/derive";
+import { useTypewriterSlot } from "../hooks/useTypewriter";
+import { TypewriterText } from "./TypewriterText";
 
 interface Props {
   latestEvent: PublicEvent | null;
@@ -35,6 +37,9 @@ function describeEvent(e: PublicEvent): string {
 }
 
 export function Now({ latestEvent, now }: Props) {
+  const text = latestEvent ? describeEvent(latestEvent) : "nothing has happened yet.";
+  const slot = useTypewriterSlot("now", 0, 1);
+
   return (
     <section>
       <div className="section-label">
@@ -42,10 +47,13 @@ export function Now({ latestEvent, now }: Props) {
       </div>
       {latestEvent ? (
         <div>
-          {describeEvent(latestEvent)} <span className="muted">— {formatRelativeTime(latestEvent.ts, now)}</span>
+          <TypewriterText key={text} text={text} {...slot} />{" "}
+          <span className="muted">— {formatRelativeTime(latestEvent.ts, now)}</span>
         </div>
       ) : (
-        <div className="empty-state">nothing has happened yet.</div>
+        <div className="empty-state">
+          <TypewriterText key={text} text={text} {...slot} />
+        </div>
       )}
     </section>
   );
