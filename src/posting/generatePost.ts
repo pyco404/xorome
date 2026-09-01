@@ -29,6 +29,7 @@ export interface GeneratePostResult {
   // collapsed to the same item despite being assigned different ones — the
   // "one candidate per item" mandate didn't take.
   anchorCollapseSignal: boolean;
+  replyToTweetId?: string;
 }
 
 const FALLBACK_JOURNAL = "session ran. no further reflection available this time.";
@@ -65,6 +66,7 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       eventIds: context.eventIds,
       totalCostUsd: 0,
       anchorCollapseSignal: false,
+      replyToTweetId: context.replyToTweetId,
     };
   }
 
@@ -96,6 +98,7 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       eventIds: context.eventIds,
       totalCostUsd: generated.totalCostUsd,
       anchorCollapseSignal,
+      replyToTweetId: context.replyToTweetId,
     };
   }
 
@@ -131,5 +134,6 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
     eventIds: context.eventIds,
     totalCostUsd: generated.totalCostUsd + judged.totalCostUsd,
     anchorCollapseSignal,
+    replyToTweetId: context.replyToTweetId,
   };
 }
