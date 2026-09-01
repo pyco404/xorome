@@ -40,19 +40,46 @@ First run: creates the `xorome` system user, clones the repo to
 `/opt/xorome`, runs `npm ci`, installs the two systemd units, enables and
 starts the timer.
 
-Then, **before the timer's first real run**, populate the env file — the
-script deliberately doesn't do this for you, since it holds real API keys:
+Re-running `sudo ./deploy/deploy.sh` later pulls the latest `main`,
+reinstalls dependencies, and re-registers the systemd units (picking up
+any changes to them) — safe to run repeatedly.
+
+## Getting .env onto the server
+
+`.env` is gitignored on purpose — `git clone`/`git pull` will **never**
+bring it onto the server, deploy.sh doesn't create one, and that's
+deliberate: it's the one file holding real secrets, most importantly
+**`SUPABASE_SERVICE_ROLE_KEY`** (full read/write on every table, bypasses
+every RLS policy) and **`ANTHROPIC_API_KEY`** (bills directly to your
+account). Both belong in this file and nowhere else — not committed,
+not in the systemd unit files, not pasted into a shell history you'll
+forget about.
+
+Copy it over explicitly, from your local machine, after deploy.sh's first
+run has created `/opt/xorome`:
 
 ```bash
-sudo cp /opt/xorome/.env.example /opt/xorome/.env
-sudo nano /opt/xorome/.env   # fill in ANTHROPIC_API_KEY, SUPABASE_*, GITHUB_TOKEN, etc.
+scp .env root@your-vps-host:/opt/xorome/.env
+```
+
+Then on the VPS, lock it down to the service user only:
+
+```bash
 sudo chown xorome:xorome /opt/xorome/.env
 sudo chmod 600 /opt/xorome/.env
 ```
 
-Re-running `sudo ./deploy/deploy.sh` later pulls the latest `main`,
-reinstalls dependencies, and re-registers the systemd units (picking up
-any changes to them) — safe to run repeatedly.
+`chmod 600` means only the `xorome` user (and root) can even read the
+file — not "world-readable, but nobody's looking." Confirm both landed:
+
+```bash
+sudo -u xorome test -r /opt/xorome/.env && echo "readable by xorome: ok"
+stat -c "%a %U:%G" /opt/xorome/.env   # expect: 600 xorome:xorome
+```
+
+If you don't already have a `.env` to copy, build one from the template
+instead and fill in real values before the `scp` step —
+`cp .env.example .env` locally, edit it, then copy it over the same way.
 
 ## What it installs
 
