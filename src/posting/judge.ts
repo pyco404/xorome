@@ -1,33 +1,49 @@
 import { callAgentSdkJson } from "./sdk.js";
 
+export interface CandidateVerdict {
+  index: number;
+  verdict: "accept" | "reject";
+  reason: string;
+}
+
 export interface JudgeResult {
-  verdict: "pass" | "none";
+  evaluations: CandidateVerdict[];
   winnerIndex: number | null;
-  reasoning: string;
   totalCostUsd: number;
 }
 
 const JUDGE_SYSTEM_PROMPT = `you are the quality gate for xorome's posts. you don't write posts — you judge candidates someone else wrote, against exact rules, and you're stricter than the writer.
 
-reject any candidate that summarises its source rather than says what the source didn't. the post is what it noticed, not what the source already said. if a candidate could have been written by someone who only read the headline, reject it.
+evaluate every candidate independently, on its own merits, against these three checks:
 
-reject any candidate whose claim is too general to be wrong. "ai agents are the future" fails — nobody could disagree with it because it doesn't say anything. a real position is one a specific, informed reader could push back on.
+1. reject if it summarises its source rather than says what the source didn't. the post is what it noticed, not what the source already said. if a candidate could have been written by someone who only read the headline, reject it.
+2. reject if its claim is too general to be wrong. "ai agents are the future" fails — nobody could disagree with it because it doesn't say anything. a real position is one a specific, informed reader could push back on.
+3. reject if it's shaped like a post from the recent-posts list below, even if the words differ — same structure, same rhythm, same move.
 
-reject any candidate shaped like a post from the recent-posts list below, even if the words differ — same structure, same rhythm, same move.
-
-if none of the candidates survive all three checks, the verdict is "none". an empty slot costs nothing; a bland post costs credibility. do not pick the least-bad candidate out of obligation — only pick one that actually clears the bar.`;
+give every candidate its own verdict and its own one-sentence reason, even the ones that pass. then, among the candidates you accepted (if any), pick the single strongest as the winner. if you accepted none, winner_index is null. do not pick a winner out of obligation — only from candidates that actually cleared all three checks.`;
 
 const SCHEMA = {
   type: "object",
   properties: {
-    verdict: { type: "string", enum: ["pass", "none"] },
+    evaluations: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer", description: "0-based index matching the candidate list" },
+          verdict: { type: "string", enum: ["accept", "reject"] },
+          reason: { type: "string", description: "one sentence, specific to this candidate" },
+        },
+        required: ["index", "verdict", "reason"],
+        additionalProperties: false,
+      },
+    },
     winner_index: {
       type: ["integer", "null"],
-      description: "0-based index of the winning candidate, or null if verdict is none",
+      description: "0-based index of the strongest accepted candidate, or null if none were accepted",
     },
-    reasoning: { type: "string", description: "one or two sentences on why, for each candidate" },
   },
-  required: ["verdict", "winner_index", "reasoning"],
+  required: ["evaluations", "winner_index"],
   additionalProperties: false,
 };
 
@@ -38,17 +54,20 @@ export async function judgeCandidates(
 ): Promise<JudgeResult> {
   const prompt = [
     `candidates:\n${candidates.map((c, i) => `[${i}] ${c}`).join("\n")}`,
-    `\nsource material the candidates are responding to:\n${sourceMaterial.slice(0, 4000)}`,
+    // Generous cap, not a real truncation in practice — opinion context can
+    // hold 3 items at up to 3000 chars each. A prior 4000-char cap silently
+    // cut off later items, and the judge rejected candidates for not
+    // addressing an item it had literally never seen.
+    `\nsource material the candidates are responding to:\n${sourceMaterial.slice(0, 16000)}`,
     recentPosts.length > 0
       ? `\nrecent posts (avoid repeating their shape):\n${recentPosts.map((p) => `- ${p}`).join("\n")}`
       : "\nno recent posts yet.",
   ].join("\n");
 
   const { data, totalCostUsd } = await callAgentSdkJson<{
-    verdict: "pass" | "none";
+    evaluations: CandidateVerdict[];
     winner_index: number | null;
-    reasoning: string;
   }>(JUDGE_SYSTEM_PROMPT, prompt, SCHEMA);
 
-  return { verdict: data.verdict, winnerIndex: data.winner_index, reasoning: data.reasoning, totalCostUsd };
+  return { evaluations: data.evaluations, winnerIndex: data.winner_index, totalCostUsd };
 }
