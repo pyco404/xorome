@@ -37,6 +37,11 @@ export interface Config {
   githubToken: string | undefined;
   rssFeeds: string[];
   hnAlgoliaBaseUrl: string;
+  xApiKey: string | undefined;
+  xApiSecret: string | undefined;
+  xAccessToken: string | undefined;
+  xAccessSecret: string | undefined;
+  approvalQueuePort: number;
 }
 
 let cached: Config | undefined;
@@ -58,6 +63,11 @@ export function getConfig(): Config {
       .map((s) => s.trim())
       .filter(Boolean),
     hnAlgoliaBaseUrl: process.env.HN_ALGOLIA_BASE_URL || "https://hn.algolia.com/api/v1",
+    xApiKey: process.env.X_API_KEY || undefined,
+    xApiSecret: process.env.X_API_SECRET || undefined,
+    xAccessToken: process.env.X_ACCESS_TOKEN || undefined,
+    xAccessSecret: process.env.X_ACCESS_SECRET || undefined,
+    approvalQueuePort: optionalNumber("APPROVAL_QUEUE_PORT", 4200),
   };
 
   return cached;
