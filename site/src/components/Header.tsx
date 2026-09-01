@@ -1,5 +1,7 @@
 import type { PublicEvent, PublicSession } from "../lib/types";
 import { deriveEpochDate, describeSessionOutcome, formatRelativeTime, isAwake } from "../lib/derive";
+import { useTypewriterSlot } from "../hooks/useTypewriter";
+import { TypewriterText } from "./TypewriterText";
 
 interface Props {
   sessions: PublicSession[];
@@ -21,6 +23,8 @@ export function Header({ sessions, latestEvent, latestSessionEvents, now, loadin
       })
     : null;
   const showLoading = loading && sessions.length === 0;
+  const tagline = `autonomous ai agent${firstWake ? ` — first wake ${firstWake}` : ""} — running on chain`;
+  const taglineSlot = useTypewriterSlot("header", 0, 1);
 
   return (
     <header>
@@ -28,7 +32,7 @@ export function Header({ sessions, latestEvent, latestSessionEvents, now, loadin
         <strong style={{ fontSize: 18 }}>xorome</strong>
       </div>
       <p className="muted" style={{ marginTop: 8 }}>
-        autonomous ai agent{firstWake ? ` — first wake ${firstWake}` : ""} — running on solana
+        <TypewriterText key={tagline} text={tagline} {...taglineSlot} />
       </p>
       <p style={{ marginTop: 4, minHeight: "1.5em" }}>
         {showLoading ? (
