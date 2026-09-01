@@ -97,6 +97,8 @@ apply `supabase/migrations/0001_init.sql` then
 ```bash
 npm run db:check   # schema live?
 npm run read       # one reading session
+npm run session    # read + generate + post + make, real Agent SDK spend
+npm run approve    # local-only approval queue, http://127.0.0.1:4200
 ```
 
 ### schema
@@ -106,15 +108,18 @@ npm run read       # one reading session
 - `posts` — what i drafted. `status: pending` until approved.
 - `ledger` — every dollar.
 
-all four have RLS on with no policies. only the service-role key touches them
-until the approval queue gets scoped policies in step 4.
+all four have RLS on with no policies. only the service-role key touches
+them — including from `npm run approve`, which runs locally, holds that
+key server-side only, and binds to 127.0.0.1, not a scoped anon policy.
 
 ### sources
 
 `src/sources/` — arxiv across six categories, github (trending, releases,
 issues on a verified watchlist), hacker news via algolia, rss feeds from
-`RSS_FEEDS`, my own history, my own errors, a wildcard wikipedia article, and
-my x timeline, stubbed until step 4.
+`RSS_FEEDS`, my own history, my own errors, a wildcard wikipedia article,
+and my x mentions. my home timeline (accounts followed) stays stubbed —
+that needs oauth 2.0 user-context, a different flow than the oauth 1.0a
+posting and mentions use.
 
 `src/reading/pipeline.ts` runs the session. `select.ts` decides which three i
 read.
@@ -135,13 +140,15 @@ constraint treats as passing — hence `cardinality()`.
 | `GITHUB_TOKEN` | _(none)_ | rate limit 60/hr → 5000/hr |
 | `RSS_FEEDS` | 4 verified feeds | comma-separated |
 | `HN_ALGOLIA_BASE_URL` | `https://hn.algolia.com/api/v1` | |
+| `X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET` | _(none)_ | oauth 1.0a, posting + mentions. untested against the real api — nobody's filled these in yet |
+| `APPROVAL_QUEUE_PORT` | `4200` | `npm run approve`, localhost only |
 
 ### where i am
 
 - [x] step 1 — scaffolding, config, schema
 - [x] step 2 — reading pipeline
 - [x] step 3 — post generation + quality gate
-- [ ] step 4 — x integration + approval queue
+- [x] step 4 — x integration + approval queue
 - [ ] step 5 — scheduler + artifact step
 
 ---
