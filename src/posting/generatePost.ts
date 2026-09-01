@@ -9,6 +9,7 @@ import type { PostCategory } from "../types/index.js";
 
 export interface CandidateReport {
   text: string;
+  primaryAnchor: string | null;
   mechanicalPass: boolean;
   mechanicalReasons: string[];
   // Present only for candidates that reached the judge (mechanicalPass === true).
@@ -24,15 +25,27 @@ export interface GeneratePostResult {
   journal: string;
   eventIds: string[];
   totalCostUsd: number;
+  // Opinion only: true when every candidate's self-reported primary_anchor
+  // collapsed to the same item despite being assigned different ones — the
+  // "one candidate per item" mandate didn't take.
+  anchorCollapseSignal: boolean;
 }
 
 const FALLBACK_JOURNAL = "session ran. no further reflection available this time.";
 
-// Generate 3 candidates, score them, keep the best — or nothing. Returns
-// null only when there was truly nothing to write about (e.g. zero items
-// read and no fallback material either) — rare, since reply falls back to
+function computeAnchorCollapse(intended: string[] | undefined, candidates: CandidateReport[]): boolean {
+  if (!intended || intended.length < 2) return false;
+  const reported = candidates.map((c) => c.primaryAnchor).filter((a): a is string => a !== null);
+  if (reported.length < intended.length) return false;
+  return new Set(reported).size === 1;
+}
+
+// Generate one candidate per anchor (opinion) or 3 independent candidates
+// (everything else), score them, keep the best — or nothing. Returns null
+// only when there was truly nothing to write about (e.g. zero items read
+// and no fallback material either) — rare, since reply falls back to
 // opinion, artifact falls back to opinion only when nothing made yet is
-// unreferenced, and opinion only needs one read.
+// unreferenced, and opinion only needs one read (plus own history).
 export async function generatePost(reading: ReadingPipelineResult): Promise<GeneratePostResult | null> {
   const category = await pickCategory();
   const context = await buildContext(category, reading);
@@ -51,13 +64,15 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       journal: FALLBACK_JOURNAL,
       eventIds: context.eventIds,
       totalCostUsd: 0,
+      anchorCollapseSignal: false,
     };
   }
 
-  const candidates: CandidateReport[] = generated.candidates.map((text) => {
-    const result = checkMechanical(text, recentPosts);
+  const candidates: CandidateReport[] = generated.candidates.map((c) => {
+    const result = checkMechanical(c.text, recentPosts);
     return {
-      text,
+      text: c.text,
+      primaryAnchor: c.primaryAnchor,
       mechanicalPass: result.pass,
       mechanicalReasons: result.reasons,
       judgeVerdict: null,
@@ -65,6 +80,8 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       isWinner: false,
     };
   });
+
+  const anchorCollapseSignal = computeAnchorCollapse(context.anchors, candidates);
 
   const survivorIndices = candidates
     .map((c, i) => (c.mechanicalPass ? i : -1))
@@ -78,6 +95,7 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       journal: generated.journal,
       eventIds: context.eventIds,
       totalCostUsd: generated.totalCostUsd,
+      anchorCollapseSignal,
     };
   }
 
@@ -88,7 +106,7 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
   );
 
   // judged.evaluations/winnerIndex are indexed into the survivor list, not
-  // the original 3 — map back to the real candidate positions.
+  // the original candidate list — map back to the real positions.
   for (const evaluation of judged.evaluations) {
     const realIndex = survivorIndices[evaluation.index];
     if (realIndex === undefined) continue;
@@ -112,5 +130,6 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
     journal: generated.journal,
     eventIds: context.eventIds,
     totalCostUsd: generated.totalCostUsd + judged.totalCostUsd,
+    anchorCollapseSignal,
   };
 }
