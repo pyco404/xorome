@@ -11,6 +11,10 @@ export interface CandidateReport {
   text: string;
   mechanicalPass: boolean;
   mechanicalReasons: string[];
+  // Present only for candidates that reached the judge (mechanicalPass === true).
+  judgeVerdict: "accept" | "reject" | null;
+  judgeReason: string | null;
+  isWinner: boolean;
 }
 
 export interface GeneratePostResult {
@@ -19,7 +23,6 @@ export interface GeneratePostResult {
   candidates: CandidateReport[];
   journal: string;
   eventIds: string[];
-  judgeReasoning: string | null;
   totalCostUsd: number;
 }
 
@@ -27,11 +30,12 @@ const FALLBACK_JOURNAL = "session ran. no further reflection available this time
 
 // Generate 3 candidates, score them, keep the best — or nothing. Returns
 // null only when there was truly nothing to write about (e.g. zero items
-// read and no fallback material either), which should be rare since
-// reply/artifact fall back to opinion and opinion only needs one read.
+// read and no fallback material either) — rare, since reply falls back to
+// opinion, artifact falls back to opinion only when nothing made yet is
+// unreferenced, and opinion only needs one read.
 export async function generatePost(reading: ReadingPipelineResult): Promise<GeneratePostResult | null> {
   const category = await pickCategory();
-  const context = buildContext(category, reading);
+  const context = await buildContext(category, reading);
   if (!context) return null;
 
   const recentPosts = await fetchRecentPostTexts();
@@ -46,40 +50,60 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
       candidates: [],
       journal: FALLBACK_JOURNAL,
       eventIds: context.eventIds,
-      judgeReasoning: `generation failed: ${err instanceof Error ? err.message : String(err)}`,
       totalCostUsd: 0,
     };
   }
 
   const candidates: CandidateReport[] = generated.candidates.map((text) => {
     const result = checkMechanical(text, recentPosts);
-    return { text, mechanicalPass: result.pass, mechanicalReasons: result.reasons };
+    return {
+      text,
+      mechanicalPass: result.pass,
+      mechanicalReasons: result.reasons,
+      judgeVerdict: null,
+      judgeReason: null,
+      isWinner: false,
+    };
   });
 
-  const survivors = candidates.filter((c) => c.mechanicalPass);
+  const survivorIndices = candidates
+    .map((c, i) => (c.mechanicalPass ? i : -1))
+    .filter((i) => i >= 0);
 
-  if (survivors.length === 0) {
+  if (survivorIndices.length === 0) {
     return {
       category: context.category,
       winner: null,
       candidates,
       journal: generated.journal,
       eventIds: context.eventIds,
-      judgeReasoning: "no candidate cleared the mechanical checks",
       totalCostUsd: generated.totalCostUsd,
     };
   }
 
   const judged = await judgeCandidates(
-    survivors.map((c) => c.text),
+    survivorIndices.map((i) => candidates[i]!.text),
     context.prompt,
     recentPosts
   );
 
-  const winner =
-    judged.verdict === "pass" && judged.winnerIndex !== null
-      ? survivors[judged.winnerIndex]?.text ?? null
-      : null;
+  // judged.evaluations/winnerIndex are indexed into the survivor list, not
+  // the original 3 — map back to the real candidate positions.
+  for (const evaluation of judged.evaluations) {
+    const realIndex = survivorIndices[evaluation.index];
+    if (realIndex === undefined) continue;
+    candidates[realIndex]!.judgeVerdict = evaluation.verdict;
+    candidates[realIndex]!.judgeReason = evaluation.reason;
+  }
+
+  let winner: string | null = null;
+  if (judged.winnerIndex !== null) {
+    const realWinnerIndex = survivorIndices[judged.winnerIndex];
+    if (realWinnerIndex !== undefined) {
+      candidates[realWinnerIndex]!.isWinner = true;
+      winner = candidates[realWinnerIndex]!.text;
+    }
+  }
 
   return {
     category: context.category,
@@ -87,7 +111,6 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
     candidates,
     journal: generated.journal,
     eventIds: context.eventIds,
-    judgeReasoning: judged.reasoning,
     totalCostUsd: generated.totalCostUsd + judged.totalCostUsd,
   };
 }
