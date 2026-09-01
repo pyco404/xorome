@@ -58,6 +58,7 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
   try {
     generated = await generateCandidates(context);
   } catch (err) {
+    console.error("generateCandidates failed:", err);
     return {
       category: context.category,
       winner: null,
