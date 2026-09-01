@@ -4,6 +4,7 @@ import { logSessionApiSpend } from "../events/ledger.js";
 import { runReadingPipeline } from "../reading/pipeline.js";
 import { generatePost } from "../posting/generatePost.js";
 import { savePost } from "../posting/savePost.js";
+import { makeAndCommitArtifact } from "../making/makeArtifact.js";
 
 // Full session: read, generate a post attempt through the quality gate,
 // journal, log real spend. Separate from `npm run read` (still what the
@@ -32,13 +33,34 @@ async function main() {
         text: "nothing to read that cleared the bar this session — no post attempted.",
       });
     } else {
+      const survived = post.candidates.filter((c) => c.mechanicalPass).length;
+
       console.log(`category: ${post.category}`);
-      console.log(`\ncandidates:`);
+      console.log(`candidates generated: ${post.candidates.length}`);
+      console.log(`survived mechanical gate: ${survived}`);
+      console.log(`judge verdict: ${post.winner ? "accepted a winner" : "accepted none"}\n`);
+
+      // Every candidate, not just the winner — this is what makes veto
+      // rate and rejected-text auditing possible instead of trusting a
+      // single aggregate summary.
       for (const [i, c] of post.candidates.entries()) {
-        console.log(`\n[${i}] ${c.mechanicalPass ? "PASS" : "REJECTED"} — ${c.text}`);
-        if (!c.mechanicalPass) console.log(`    reasons: ${c.mechanicalReasons.join("; ")}`);
+        const judgeLine = c.judgeVerdict
+          ? `judge: ${c.judgeVerdict}${c.isWinner ? " (WINNER)" : ""} — ${c.judgeReason}`
+          : "judge: not reached (failed mechanical gate)";
+        console.log(`[${i}] ${c.mechanicalPass ? "mechanical PASS" : "mechanical REJECT"} — ${c.text}`);
+        if (!c.mechanicalPass) console.log(`    mechanical reasons: ${c.mechanicalReasons.join("; ")}`);
+        console.log(`    ${judgeLine}\n`);
+
+        await logEvent(session.id, session.generation, "post_candidate", {
+          category: post.category,
+          text: c.text,
+          is_winner: c.isWinner,
+          mechanical_pass: c.mechanicalPass,
+          mechanical_reasons: c.mechanicalReasons,
+          judge_verdict: c.judgeVerdict,
+          judge_reason: c.judgeReason,
+        });
       }
-      console.log(`\njudge: ${post.judgeReasoning}`);
 
       if (post.winner) {
         const postId = await savePost({
@@ -49,20 +71,48 @@ async function main() {
           in_reply_to_id: null,
           in_reply_to_url: null,
           event_ids: post.eventIds,
-          metadata: { judge_reasoning: post.judgeReasoning },
+          metadata: {},
         });
         await logEvent(session.id, session.generation, "post", {
           postId,
           category: post.category,
           content: post.winner,
         });
-        console.log(`\nPOSTED (pending approval): ${post.winner}`);
+        console.log(`POSTED (pending approval): ${post.winner}`);
       } else {
-        console.log("\nno candidate passed — posting nothing.");
+        console.log("no candidate passed — posting nothing.");
       }
 
       await logEvent(session.id, session.generation, "journal", { text: post.journal });
       console.log(`\njournal: ${post.journal}`);
+    }
+
+    // Make step: after posting, not before — this session's artifact
+    // isn't available to this session's own post (avoids a chicken-and-egg
+    // ordering problem), but sits ready, unreferenced, for a future
+    // session whose category lands on "artifact".
+    try {
+      const artifact = await makeAndCommitArtifact(session.generation, session.id);
+      await logEvent(
+        session.id,
+        session.generation,
+        "artifact",
+        {
+          artifactType: artifact.type,
+          title: artifact.title,
+          filePath: artifact.filePath,
+          content: artifact.content,
+          commitHash: artifact.commitHash,
+        },
+        undefined
+      );
+      console.log(`\nmade: ${artifact.title} (${artifact.type}) — ${artifact.filePath} @ ${artifact.commitHash.slice(0, 8)}`);
+    } catch (err) {
+      console.error("artifact step failed:", err);
+      await logEvent(session.id, session.generation, "error", {
+        source: "make_artifact",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
 
     await logSessionApiSpend(
