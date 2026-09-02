@@ -68,9 +68,12 @@ sudo -u "$SERVICE_USER" npm ci
 echo "installing systemd units..."
 install -m 644 "$REPO_DIR/deploy/systemd/xorome-session.service" /etc/systemd/system/xorome-session.service
 install -m 644 "$REPO_DIR/deploy/systemd/xorome-session.timer" /etc/systemd/system/xorome-session.timer
+install -m 644 "$REPO_DIR/deploy/systemd/xorome-funding.service" /etc/systemd/system/xorome-funding.service
+install -m 644 "$REPO_DIR/deploy/systemd/xorome-funding.timer" /etc/systemd/system/xorome-funding.timer
 
 systemctl daemon-reload
 systemctl enable --now xorome-session.timer
+systemctl enable --now xorome-funding.timer
 
 echo
 echo "deployed $(git rev-parse --short HEAD)."
