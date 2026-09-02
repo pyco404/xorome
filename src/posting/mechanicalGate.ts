@@ -1,3 +1,5 @@
+import { toPublishedText } from "./format.js";
+
 const MAX_CHARS = 240;
 
 const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/u;
@@ -29,10 +31,19 @@ const MARKET_PHRASES = [
 
 const CASHTAG_RE = /\$[A-Z]{2,10}\b/;
 
-// The two shapes the spec calls out by name as the model's default tics.
+// The two sentence-level shapes the spec calls out by name, plus the
+// rhetorical-form tic found across an actual batch: "X assumes/claims A,
+// Y shows/proves B, they're not the same" — different words every time,
+// same three-beat move (assert, counter-example, explicit non-equivalence)
+// often enough to read as a tic across a set. Both flavors share one
+// cooldown pool below: whatever shape a recent post used, a new candidate
+// using it again fails.
 const STRUCTURE_PATTERNS: { name: string; re: RegExp }[] = [
   { name: "x-but-not-y", re: /\bbut not\b/i },
   { name: "everyone-nobody", re: /\beveryone\b[^.]{0,80}\bnobody\b/i },
+  { name: "assumes-vs-shows", re: /\b(assumes?|claims?|treats?\s+\S+\s+as|wants?|lists?\s+\S+\s+as)\b[\s\S]{0,150}\b(shows?|proves?|reveals?|catches)\b/i },
+  { name: "not-the-same", re: /\b(aren'?t|isn'?t|is not|are not)\s+the\s+same\b/i },
+  { name: "one-the-other", re: /\bone\b[^.]{0,80}\bthe other\b/i },
 ];
 
 export interface MechanicalResult {
@@ -53,7 +64,10 @@ export function checkMechanical(candidate: string, recentPosts: string[]): Mecha
   const text = candidate.trim();
 
   if (text.length === 0) reasons.push("empty");
-  if (text.length > MAX_CHARS) reasons.push(`over ${MAX_CHARS} chars (${text.length})`);
+  // Checked against the published (sentence-per-line) form, not the raw
+  // candidate — that's what actually has to fit on X.
+  const publishedLength = toPublishedText(text).length;
+  if (publishedLength > MAX_CHARS) reasons.push(`over ${MAX_CHARS} chars (${publishedLength} published)`);
   if (/[A-Z]/.test(text)) reasons.push("contains uppercase (lowercase only)");
   if (EMOJI_RE.test(text)) reasons.push("contains emoji");
   if (text.includes("!")) reasons.push("contains exclamation mark");
@@ -73,7 +87,7 @@ export function checkMechanical(candidate: string, recentPosts: string[]): Mecha
   if (candidateStructures.length > 0) {
     const recentStructures = new Set(recentPosts.flatMap(matchedStructures));
     for (const s of candidateStructures) {
-      if (recentStructures.has(s)) reasons.push(`sentence-structure cooldown: "${s}" used recently`);
+      if (recentStructures.has(s)) reasons.push(`structure/form cooldown: "${s}" used recently`);
     }
   }
 
