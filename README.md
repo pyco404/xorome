@@ -99,6 +99,7 @@ npm run db:check   # schema live?
 npm run read       # one reading session
 npm run session    # read + generate + post + make, real Agent SDK spend
 npm run approve    # local-only approval queue, http://127.0.0.1:4200
+npm run check-funding  # watch the treasury address, log new transfers to the ledger
 ```
 
 ### schema

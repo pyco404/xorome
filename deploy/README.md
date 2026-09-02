@@ -92,6 +92,13 @@ instead and fill in real values before the `scp` step —
   timezone the VPS ends up configured with. `Persistent=true` means a
   run missed while the machine was off fires once as soon as the timer is
   active again, instead of silently skipping it.
+- `/etc/systemd/system/xorome-funding.service` + `.timer` — a separate,
+  lighter pair that runs `npm run check-funding` every 30 minutes,
+  independent of the session loop (money-tracking shouldn't depend on
+  whether a posting session succeeds). Watches the Solana treasury
+  address for new incoming transfers and logs each as a real ledger
+  entry — real signature, real amount, real block time. Idempotent by
+  transaction signature, so re-running never double-counts.
 
 Unlike `.session-batch/run.sh` (the cron script from the 8-run baseline
 test), this timer is **not** self-limiting — it runs indefinitely, which
