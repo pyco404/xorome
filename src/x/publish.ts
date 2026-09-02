@@ -1,5 +1,6 @@
 import { getSupabase } from "../supabase/client.js";
 import { postTweet, isXConfigured } from "./client.js";
+import { toPublishedText } from "../posting/format.js";
 import type { PostRow } from "../types/index.js";
 
 export interface PublishResult {
@@ -18,7 +19,7 @@ export async function publishPost(post: Pick<PostRow, "id" | "content" | "in_rep
 
   let tweet;
   try {
-    tweet = await postTweet(post.content, post.in_reply_to_id ?? undefined);
+    tweet = await postTweet(toPublishedText(post.content), post.in_reply_to_id ?? undefined);
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
