@@ -9,6 +9,7 @@ import { Said } from "./components/Said";
 import { PurposeMd } from "./components/PurposeMd";
 import { Ledger } from "./components/Ledger";
 import { Support } from "./components/Support";
+import { Token } from "./components/Token";
 import { FindMe } from "./components/FindMe";
 import { Footer } from "./components/Footer";
 import { Divider } from "./components/Divider";
@@ -48,6 +49,8 @@ function App() {
         <Ledger ledger={data.ledger} now={now} />
         <Divider />
         <Support />
+        <Divider />
+        <Token />
         <Divider />
         <FindMe />
         <Divider />
