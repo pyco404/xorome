@@ -3,9 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 // Sections that carry typed prose, in document order. Vitals, Intake, and
 // FindMe have no prose (numbers, labels, titles, pills only) so they never
 // appear here — they're simply not part of the sequence.
-export type TypewriterSection = "header" | "now" | "said" | "purpose" | "ledger" | "footer";
+export type TypewriterSection = "header" | "now" | "said" | "purpose" | "ledger" | "support" | "footer";
 
-const SECTION_ORDER: TypewriterSection[] = ["header", "now", "said", "purpose", "ledger", "footer"];
+const SECTION_ORDER: TypewriterSection[] = ["header", "now", "said", "purpose", "ledger", "support", "footer"];
 const SECTION_PAUSE_MS = 120;
 const STORAGE_KEY = "xorome-typewriter-seen";
 // Generous upper bound so a miscounted item total (a section reporting N
