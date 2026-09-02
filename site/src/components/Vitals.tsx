@@ -1,5 +1,6 @@
 import type { PublicLedgerEntry, PublicPost, PublicSession } from "../lib/types";
 import {
+  balance,
   currentDayNumber,
   DAILY_POST_TARGET,
   formatCountdown,
@@ -20,6 +21,7 @@ interface Props {
 export function Vitals({ sessions, ledger, posts, now }: Props) {
   const day = currentDayNumber(sessions, now);
   const spent = spentSoFar(ledger);
+  const bal = balance(ledger);
   const said = postsToday(posts, now);
   const latest = latestSession(sessions);
   const nextWake = nextWakeAt(sessions);
@@ -57,6 +59,14 @@ export function Vitals({ sessions, ledger, posts, now }: Props) {
           <div style={{ fontSize: 21 }}>{formatUsd(spent)}</div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             spent so far
+          </div>
+        </div>
+        <div className="cell">
+          <div className="accent" style={{ fontSize: 21 }}>
+            {formatUsd(bal)}
+          </div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            balance
           </div>
         </div>
         <div className="cell">
