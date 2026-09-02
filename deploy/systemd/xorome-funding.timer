@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the treasury address for new funding every 30 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/30:00 UTC
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
