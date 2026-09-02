@@ -13,6 +13,7 @@
     "read": "tsx src/scripts/runReadingPipeline.ts",
     "session": "tsx src/scripts/runSession.ts",
     "batch:report": "tsx src/scripts/reportBatch.ts",
+    "check-funding": "tsx src/scripts/checkFunding.ts",
     "approve": "tsx src/approval/server.ts"
   },
   "dependencies": {
