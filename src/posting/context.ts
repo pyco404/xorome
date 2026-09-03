@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSupabase } from "../supabase/client.js";
-import type { ReadingPipelineResult, SeenItem } from "../reading/pipeline.js";
+import type { ReadingPipelineResult } from "../reading/pipeline.js";
 import type { PostCategory } from "../types/index.js";
 
 export interface PostContext {
@@ -28,6 +28,13 @@ function readPurposeMd(): string {
   }
 }
 
+// Builds context for exactly the category asked for — no internal
+// fallback. A category picked by pickCategoryOrder() but structurally
+// unable to produce material this session (reply with no mentions read,
+// process with no errors) returns null; the caller (generatePost.ts)
+// tries the next category in deficit order rather than collapsing
+// straight to opinion, so one perpetually-empty category (reply, until
+// real X mentions exist) can't starve every other one behind it.
 export async function buildContext(
   category: PostCategory,
   reading: ReadingPipelineResult
@@ -36,20 +43,20 @@ export async function buildContext(
     case "opinion":
       return buildOpinionContext(reading);
     case "process":
-      return buildProcessContext(reading) ?? buildOpinionContext(reading);
+      return buildProcessContext(reading);
     case "reflection":
-      return buildReflectionContext(reading) ?? buildOpinionContext(reading);
+      return buildReflectionContext(reading);
     case "artifact":
-      return (await buildArtifactContext()) ?? buildOpinionContext(reading);
+      return buildArtifactContext();
     case "reply":
-      return buildReplyContext(reading) ?? buildOpinionContext(reading);
+      return buildReplyContext(reading);
   }
 }
 
-// Falls back to opinion whenever there's nothing worth replying to — no
-// mentions were read this session — exactly as spec anticipates ("expect
-// this to happen often in the first weeks"). Uses the mention's own text
-// as context, not a full walked thread: X's reverse-chronological/thread
+// Returns null whenever there's nothing worth replying to — no mentions
+// were read this session — exactly as spec anticipates ("expect this to
+// happen often in the first weeks"). Uses the mention's own text as
+// context, not a full walked thread: X's reverse-chronological/thread
 // APIs need more than the mentions endpoint alone, and this is genuinely
 // untested against the live API either way (no X credentials to test
 // with) — keeping the scope bounded here rather than compounding
@@ -72,53 +79,61 @@ function readBlock(kind: string, title: string, text: string): string {
   return `[${kind}] ${title}\n${text.slice(0, 3000)}`;
 }
 
-// Every rejection in the first batch failed the same way: paraphrasing one
-// source's own stated diagnosis. The fix isn't "reference an item," it's
-// forcing a comparison — set two things against each other and say what's
-// different, which is where a real position comes from, not a restatement.
+// Forcing a comparison fixed the original failure mode (paraphrasing a
+// source's own stated diagnosis) but overcorrected into a new one: a
+// candidate that dutifully sets two things against each other and stops
+// at the difference, asserting nothing anyone could disagree with —
+// "an empty list means wildcard in one function, empty set in another" is
+// a true, specific observation and not a position. Comparison is one way
+// to reach a real claim, not the only one; a flat assertion, a question
+// the source can't answer, or something found absurd can get there too.
+// What's mandatory now is the claim itself, checked in judge.ts, not the
+// shape it arrives in.
 //
 // One candidate per available read item (not a fixed 3 pulled from
-// whichever item the model liked best), each anchored to a different item
-// and required to compare it against something else: another read if
-// there are 2+, or own history if there's only 1. If there's exactly one
-// read and no own-history material, there's no valid comparison — opinion
-// can't honestly run this session, same principle as every other fallback
-// here: never fabricate what doesn't exist.
+// whichever item the model liked best), each anchored to a different
+// item. Own-history material is deliberately left out: opinions are about
+// the world, not about xorome — that's the reflection slot's job.
 function buildOpinionContext(reading: ReadingPipelineResult): PostContext | null {
   const reads = reading.itemsRead;
   if (reads.length === 0) return null;
 
-  const ownHistory: SeenItem[] = reading.itemsSeen.filter((s) => s.item.kind === "own_history");
-  if (reads.length === 1 && ownHistory.length === 0) return null;
-
-  const historyBlock =
-    ownHistory.length > 0
-      ? ownHistory.map((s) => readBlock("own_history", s.item.title, s.item.summary)).join("\n\n")
-      : null;
-
   const anchorBlocks = reads.map((r, i) => {
     const others = reads.filter((_, j) => j !== i);
-    const comparisonBlock =
+    const othersBlock =
       others.length > 0
-        ? others.map((o) => readBlock(o.item.kind, o.item.title, o.fullText)).join("\n\n")
-        : (historyBlock as string); // reads.length === 1 guarantees historyBlock is non-null here
+        ? `\n\nother material available this session, if a comparison actually earns its place:\n${others
+            .map((o) => readBlock(o.item.kind, o.item.title, o.fullText))
+            .join("\n\n")}`
+        : "";
 
     return (
       `--- candidate ${i + 1}: anchored to [${r.item.kind}] ${r.item.title} ---\n` +
-      `${readBlock(r.item.kind, r.item.title, r.fullText)}\n\n` +
-      `compare it against:\n${comparisonBlock}`
+      `${readBlock(r.item.kind, r.item.title, r.fullText)}${othersBlock}`
     );
   });
 
   const prompt =
-    "write opinion post candidates. write exactly one candidate per anchor below, in order — each " +
-    "candidate must draw on its anchor AND the comparison material given with it, and say what's " +
-    "different, what conflicts, or what one leaves out that the other doesn't. a candidate that only " +
-    "restates its anchor without setting it against the comparison material fails — that's what caused " +
-    "every rejection last time.\n\n" +
+    "write opinion post candidates. write exactly one candidate per anchor below, in order.\n\n" +
+    "two requirements, non-negotiable:\n" +
+    "1. assert something arguable — a position a specific, informed reader could push back on. noticing " +
+    "a difference is not a claim. \"in langgraph's subscription code, an empty list means wildcard in " +
+    "one function and empty set in another\" is true and specific and asserts nothing — nobody can " +
+    "disagree with it, it just states what is. compare that to: \"most agent benchmarks measure whether " +
+    "the thing finished. almost none measure whether it should have started.\" or: \"if your test suite " +
+    "was written by the thing it tests, you don't have a test suite. you have a preference.\" both take " +
+    "a position someone could argue with.\n" +
+    "2. stand alone — a reader who has never heard of this repo, function, or paper must be able to " +
+    "follow the post and see why it matters, with no prior context. if the claim only makes sense to " +
+    "someone who already knows the source, it fails this even if check 1 passes.\n\n" +
+    "how you get there is your choice, chosen per candidate, not fixed in advance: set the anchor " +
+    "against the other material below if a real comparison earns its place, state a flat claim the " +
+    "anchor supports, ask a question the anchor can't answer, or say what about it is absurd. do not " +
+    "default to comparison just because other material is available — vary it across the candidates " +
+    "below rather than reaching for the same move every time.\n\n" +
     anchorBlocks.join("\n\n");
 
-  const eventIds = [...reads.map((r) => r.eventId), ...ownHistory.map((s) => s.eventId)];
+  const eventIds = reads.map((r) => r.eventId);
   const anchors = reads.map((r) => r.item.title);
 
   return {
