@@ -1,15 +1,17 @@
-import { pickCategory } from "./mix.js";
+import { pickCategoryOrder } from "./mix.js";
 import { buildContext } from "./context.js";
+import type { PostContext } from "./context.js";
 import { generateCandidates } from "./generate.js";
 import { checkMechanical } from "./mechanicalGate.js";
 import { judgeCandidates } from "./judge.js";
-import { fetchRecentPostTexts } from "./recentPosts.js";
+import { fetchRecentPostTexts, fetchRecentRhetoricalForms } from "./recentPosts.js";
 import type { ReadingPipelineResult } from "../reading/pipeline.js";
 import type { PostCategory } from "../types/index.js";
 
 export interface CandidateReport {
   text: string;
   primaryAnchor: string | null;
+  rhetoricalForm: string | null;
   mechanicalPass: boolean;
   mechanicalReasons: string[];
   // Present only for candidates that reached the judge (mechanicalPass === true).
@@ -42,17 +44,24 @@ function computeAnchorCollapse(intended: string[] | undefined, candidates: Candi
 }
 
 // Generate one candidate per anchor (opinion) or 3 independent candidates
-// (everything else), score them, keep the best — or nothing. Returns null
-// only when there was truly nothing to write about (e.g. zero items read
-// and no fallback material either) — rare, since reply falls back to
-// opinion, artifact falls back to opinion only when nothing made yet is
-// unreferenced, and opinion only needs one read (plus own history).
+// (everything else), score them, keep the best — or nothing. Tries
+// categories in deficit order (see pickCategoryOrder) until one actually
+// has material, rather than jumping straight to opinion the moment the
+// single most-deficient pick can't be built. Returns null only when
+// nothing in that whole order had material — rare, since opinion only
+// needs one read and sits last in the order once it's over-represented.
 export async function generatePost(reading: ReadingPipelineResult): Promise<GeneratePostResult | null> {
-  const category = await pickCategory();
-  const context = await buildContext(category, reading);
+  const order = await pickCategoryOrder();
+
+  let context: PostContext | null = null;
+  for (const candidate of order) {
+    context = await buildContext(candidate, reading);
+    if (context) break;
+  }
   if (!context) return null;
 
   const recentPosts = await fetchRecentPostTexts();
+  const recentForms = context.category === "opinion" ? await fetchRecentRhetoricalForms() : [];
 
   let generated;
   try {
@@ -72,10 +81,11 @@ export async function generatePost(reading: ReadingPipelineResult): Promise<Gene
   }
 
   const candidates: CandidateReport[] = generated.candidates.map((c) => {
-    const result = checkMechanical(c.text, recentPosts);
+    const result = checkMechanical(c.text, recentPosts, c.rhetoricalForm, recentForms);
     return {
       text: c.text,
       primaryAnchor: c.primaryAnchor,
+      rhetoricalForm: c.rhetoricalForm,
       mechanicalPass: result.pass,
       mechanicalReasons: result.reasons,
       judgeVerdict: null,
