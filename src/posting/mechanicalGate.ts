@@ -59,7 +59,18 @@ function matchedStructures(text: string): string[] {
 // fail mechanically; the fuzzy judgment (summarizes vs. notices, too
 // general to be wrong) happens separately in judge.ts, which has the
 // source material and recent posts to reason over.
-export function checkMechanical(candidate: string, recentPosts: string[]): MechanicalResult {
+//
+// rhetoricalForm/recentForms are opinion-only, self-reported (see
+// generate.ts) — comparison isn't mandatory anymore, so which move a
+// candidate makes has to be tracked and cooled down the same way a
+// repeated sentence structure is, or the model just settles on whichever
+// move is easiest and repeats it every time instead.
+export function checkMechanical(
+  candidate: string,
+  recentPosts: string[],
+  rhetoricalForm?: string | null,
+  recentForms?: string[]
+): MechanicalResult {
   const reasons: string[] = [];
   const text = candidate.trim();
 
@@ -89,6 +100,10 @@ export function checkMechanical(candidate: string, recentPosts: string[]): Mecha
     for (const s of candidateStructures) {
       if (recentStructures.has(s)) reasons.push(`structure/form cooldown: "${s}" used recently`);
     }
+  }
+
+  if (rhetoricalForm && recentForms?.includes(rhetoricalForm)) {
+    reasons.push(`rhetorical-form cooldown: "${rhetoricalForm}" used recently`);
   }
 
   return { pass: reasons.length === 0, reasons };
