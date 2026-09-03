@@ -73,6 +73,7 @@ async function main() {
       }
 
       if (post.winner) {
+        const winningCandidate = post.candidates.find((c) => c.isWinner);
         const postId = await savePost({
           session_id: session.id,
           generation: session.generation,
@@ -81,7 +82,7 @@ async function main() {
           in_reply_to_id: post.replyToTweetId ?? null,
           in_reply_to_url: post.replyToTweetId ? `https://x.com/i/status/${post.replyToTweetId}` : null,
           event_ids: post.eventIds,
-          metadata: {},
+          metadata: winningCandidate?.rhetoricalForm ? { rhetoricalForm: winningCandidate.rhetoricalForm } : {},
         });
         await logEvent(session.id, session.generation, "post", {
           postId,
